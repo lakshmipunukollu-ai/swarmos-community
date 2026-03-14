@@ -155,10 +155,10 @@ export default function ProjectDetail() {
                 </div>
               ))}
             </div>
-            {project.build_summary && (
+            {project?.build_summary && (
               <div style={{ marginTop: 12, background: 'var(--surface)', borderRadius: 8, padding: 14, border: '1px solid var(--green)' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', marginBottom: 6 }}>BUILD SUMMARY AVAILABLE</div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.7 }}>{project.build_summary.slice(0, 300)}...</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.7 }}>{project?.build_summary.slice(0, 300)}...</div>
               </div>
             )}
           </div>
@@ -208,7 +208,7 @@ export default function ProjectDetail() {
       {tab === 'quiz' && (
         <div style={{ textAlign: 'center', padding: 60 }}>
           <div style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 16 }}>
-            {project.build_summary
+            {project?.build_summary
               ? '✓ Build summary available — quiz uses your actual code'
               : 'Quiz uses project knowledge. More accurate after build completes.'}
           </div>
