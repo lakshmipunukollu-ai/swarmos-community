@@ -34,6 +34,16 @@ def project_to_dict(p):
         "created_at": p.created_at.isoformat() if p.created_at else None,
     }
 
+@router.get("/seed")
+def seed_projects(db: Session = Depends(get_db)):
+    count = 0
+    for data in GAUNTLET_PROJECTS:
+        if not db.query(Project).filter(Project.id == data["id"]).first():
+            db.add(Project(**data))
+            count += 1
+    db.commit()
+    return {"seeded": count}
+    
 @router.get("")
 def list_projects(db: Session = Depends(get_db)):
     return [project_to_dict(p) for p in db.query(Project).order_by(Project.created_at).all()]
