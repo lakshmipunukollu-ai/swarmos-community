@@ -36,15 +36,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
       </head>
       <body>
-        <header style={{ borderBottom: '1px solid var(--border)', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-            <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 2 }}>
-              SWARM<span style={{ color: 'var(--green)' }}>OS</span>
-            </span>
+        <header style={{
+          borderBottom: '1px solid var(--border)', padding: '12px 24px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          position: 'sticky', top: 0, zIndex: 100,
+          background: 'var(--bg)', backdropFilter: 'blur(8px)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+            <Link href="/" style={{ textDecoration: 'none' }}>
+              <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 3, color: 'var(--text)' }}>
+                SWARM<span style={{ color: 'var(--green)' }}>OS</span>
+              </span>
+            </Link>
             <nav style={{ display: 'flex', gap: 4 }}>
               {nav.map(n => (
                 <Link key={n.href} href={n.href} style={{
-                  padding: '5px 12px', fontSize: 12, borderRadius: 20,
+                  padding: '5px 14px', fontSize: 11, borderRadius: 20,
                   textDecoration: 'none', letterSpacing: 1, textTransform: 'uppercase',
                   background: pathname === n.href ? 'var(--text)' : 'transparent',
                   color: pathname === n.href ? 'var(--bg)' : 'var(--muted)',
@@ -57,13 +64,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
           <button onClick={toggleTheme} style={{
             background: 'transparent', border: '1px solid var(--border)',
-            borderRadius: 20, padding: '5px 12px', fontSize: 11,
-            color: 'var(--muted)', cursor: 'pointer', letterSpacing: 1,
+            borderRadius: 20, padding: '5px 14px', fontSize: 11,
+            color: 'var(--muted)', cursor: 'pointer', letterSpacing: 1, fontFamily: 'monospace',
           }}>
-            {dark ? 'Light' : 'Dark'}
+            {dark ? '☀ Light' : '◑ Dark'}
           </button>
         </header>
-        <main style={{ padding: '24px 20px', maxWidth: 1200, margin: '0 auto' }}>
+        <main style={{ padding: '24px', width: '100%', boxSizing: 'border-box', maxWidth: '100%' }}>
           {children}
         </main>
       </body>

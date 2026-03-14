@@ -35,23 +35,31 @@ function QuizContent() {
   const [qtype, setQtype] = useState('architecture')
   const [level, setLevel] = useState(1)
   const [questions, setQuestions] = useState<Question[]>([])
+  const [shuffledOptions, setShuffledOptions] = useState<string[]>([])
   const [current, setCurrent] = useState(0)
   const [answered, setAnswered] = useState<Record<number, string>>({})
   const [score, setScore] = useState({ correct: 0, total: 0 })
-  const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [feedback, setFeedback] = useState<any>(null)
+
+  const q = questions[current]
+
+  useEffect(() => {
+    if (q) {
+      const opts = [...(q.wrong_answers || []), q.correct_answer].sort(() => Math.random() - 0.5)
+      setShuffledOptions(opts)
+    }
+  }, [current, questions])
 
   const generate = useCallback(async (count = 5) => {
     setGenerating(true)
     try {
       const result = await api.generateQuiz(projectId, qtype, level, count)
-      setQuestions(prev => [...prev, ...result.questions])
-      if (questions.length === 0) setCurrent(0)
+      setQuestions(prev => [...prev, ...(result.questions || [])])
     } finally {
       setGenerating(false)
     }
-  }, [projectId, qtype, level, questions.length])
+  }, [projectId, qtype, level])
 
   const startFresh = async () => {
     setQuestions([])
@@ -68,23 +76,14 @@ function QuizContent() {
     }
   }
 
-  const q = questions[current]
-
-  const allOptions = q ? [...(q.wrong_answers || []), q.correct_answer].sort(() => Math.random() - 0.5) : []
-
   const answer = async (chosen: string) => {
     if (!q || answered[current] !== undefined) return
     const isCorrect = chosen === q.correct_answer
     setAnswered(prev => ({ ...prev, [current]: chosen }))
     setScore(s => ({ correct: s.correct + (isCorrect ? 1 : 0), total: s.total + 1 }))
-
     const result = await api.submitAttempt(q.id, projectId, chosen, isCorrect)
     setFeedback(result)
-
-    // Auto-generate more questions when nearing end
-    if (current >= questions.length - 2) {
-      generate(3)
-    }
+    if (current >= questions.length - 2) generate(3)
   }
 
   const next = () => {
@@ -93,149 +92,180 @@ function QuizContent() {
   }
 
   const accuracy = score.total > 0 ? Math.round((score.correct / score.total) * 100) : 0
+  const hasAnswered = answered[current] !== undefined
 
   return (
-    <div style={{ maxWidth: 720 }}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Quiz</div>
+    <div style={{ width: '100%' }}>
+      <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Quiz</div>
       <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 20 }}>
         Study what you built. Questions never run out. Keep going until you know it cold.
       </div>
 
-      {/* Controls */}
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Project</div>
+      {/* Controls bar */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flex: '0 0 260px' }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Project</div>
             <select value={projectId} onChange={e => setProjectId(e.target.value)}
               style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontFamily: 'monospace', fontSize: 12, padding: '7px 10px' }}>
               {PROJECTS.map(p => <option key={p.id} value={p.id}>{p.name} — {p.company}</option>)}
             </select>
           </div>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Level</div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Type</div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {TYPES.map(t => (
+                <button key={t} onClick={() => setQtype(t)} style={{
+                  padding: '5px 10px', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase',
+                  border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', fontFamily: 'monospace',
+                  background: qtype === t ? 'var(--text)' : 'transparent',
+                  color: qtype === t ? 'var(--bg)' : 'var(--muted)',
+                }}>{t.replace('_', ' ')}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Level — {LEVEL_LABELS[level - 1]}</div>
             <div style={{ display: 'flex', gap: 4 }}>
               {LEVELS.map((l, i) => (
                 <button key={l} onClick={() => setLevel(l)} title={LEVEL_LABELS[i]} style={{
-                  flex: 1, padding: '6px 4px', fontSize: 11, fontFamily: 'monospace',
-                  border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
+                  width: 32, height: 32, fontSize: 13, fontFamily: 'monospace', fontWeight: 700,
+                  border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer',
                   background: level === l ? 'var(--text)' : 'transparent',
                   color: level === l ? 'var(--bg)' : 'var(--muted)',
                 }}>{l}</button>
               ))}
             </div>
           </div>
-        </div>
-
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Question type</div>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {TYPES.map(t => (
-              <button key={t} onClick={() => setQtype(t)} style={{
-                padding: '5px 12px', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase',
-                border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', fontFamily: 'monospace',
-                background: qtype === t ? 'var(--text)' : 'transparent',
-                color: qtype === t ? 'var(--bg)' : 'var(--muted)',
-              }}>{t.replace('_', ' ')}</button>
-            ))}
+          <div style={{ marginLeft: 'auto' }}>
+            <button onClick={startFresh} disabled={generating} style={{
+              padding: '10px 22px', background: generating ? 'var(--border)' : 'var(--text)',
+              color: 'var(--bg)', border: 'none', borderRadius: 6, cursor: generating ? 'not-allowed' : 'pointer',
+              fontSize: 12, fontWeight: 700, fontFamily: 'monospace',
+            }}>
+              {generating ? 'Generating...' : questions.length > 0 ? 'New session' : 'Start quiz'}
+            </button>
           </div>
         </div>
-
-        <button onClick={startFresh} disabled={generating} style={{
-          padding: '9px 20px', background: generating ? 'var(--border)' : 'var(--text)',
-          color: 'var(--bg)', border: 'none', borderRadius: 6, cursor: generating ? 'not-allowed' : 'pointer',
-          fontSize: 12, fontWeight: 700, fontFamily: 'monospace',
-        }}>
-          {generating ? 'Generating...' : questions.length > 0 ? 'New session' : 'Start quiz'}
-        </button>
       </div>
 
-      {/* Score */}
+      {/* Score bar */}
       {score.total > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 16px', marginBottom: 16 }}>
-          <div style={{ fontSize: 28, fontWeight: 700, color: accuracy >= 70 ? 'var(--green)' : 'var(--amber)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 18px', marginBottom: 16 }}>
+          <div style={{ fontSize: 32, fontWeight: 700, color: accuracy >= 70 ? 'var(--green)' : accuracy >= 50 ? 'var(--amber)' : 'var(--red)' }}>
             {score.correct}/{score.total}
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 500 }}>{accuracy}% accuracy</div>
-            <div style={{ fontSize: 10, color: 'var(--muted)' }}>
-              {LEVEL_LABELS[level - 1]} · {qtype.replace('_', ' ')}
-            </div>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>{accuracy}% accuracy</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Level {level} — {LEVEL_LABELS[level-1]} — {qtype.replace('_',' ')}</div>
           </div>
           <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-            <div style={{ fontSize: 10, color: 'var(--muted)' }}>{questions.length - current - 1} more queued</div>
-            {generating && <div style={{ fontSize: 10, color: 'var(--amber)' }}>Generating more...</div>}
+            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Question {current + 1} of {questions.length}</div>
+            {generating && <div style={{ fontSize: 11, color: 'var(--amber)' }}>Generating more...</div>}
+          </div>
+          {/* Progress bar */}
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, background: 'var(--border)', borderRadius: '0 0 8px 8px', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${accuracy}%`, background: accuracy >= 70 ? 'var(--green)' : 'var(--amber)', transition: 'width 0.5s' }} />
           </div>
         </div>
       )}
 
-      {/* Question */}
-      {q && (
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 20, marginBottom: 12 }}>
-          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--blue)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-            {q.type.replace('_', ' ')} · level {q.level} · question {current + 1}
-          </div>
-          <div style={{ fontSize: 14, lineHeight: 1.7, marginBottom: 16, color: 'var(--text)' }}>
-            {q.question}
+      {/* Two column layout when question is active */}
+      {q ? (
+        <div style={{ display: 'grid', gridTemplateColumns: hasAnswered ? '1fr 1fr' : '1fr', gap: 16, transition: 'all 0.3s' }}>
+          {/* Left: Question */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 22 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--blue)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>
+              {q.type.replace('_', ' ')} · Level {q.level} · Q{current + 1}
+            </div>
+            <div style={{ fontSize: 15, lineHeight: 1.7, marginBottom: 20, color: 'var(--text)' }}>
+              {q.question}
+            </div>
+
+            {q.type === 'flashcard' ? (
+              answered[current] === undefined ? (
+                <button onClick={() => answer(q.correct_answer)} style={{
+                  width: '100%', padding: '12px', background: 'var(--bg)', border: '1px solid var(--border)',
+                  borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text)', fontFamily: 'monospace',
+                }}>Reveal answer ↓</button>
+              ) : (
+                <div style={{ padding: 14, background: 'rgba(0,217,126,0.08)', borderRadius: 8, border: '1px solid var(--green)', fontSize: 14, color: 'var(--text)', lineHeight: 1.7 }}>
+                  {q.correct_answer}
+                </div>
+              )
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {shuffledOptions.map((opt, i) => {
+                  const isChosen = answered[current] === opt
+                  const isCorrect = opt === q.correct_answer
+                  let bg = 'var(--bg)', border = '1px solid var(--border)', color = 'var(--text)'
+                  if (hasAnswered) {
+                    if (isCorrect) { bg = 'rgba(0,217,126,0.08)'; border = '1px solid var(--green)'; color = 'var(--green)' }
+                    else if (isChosen) { bg = 'rgba(255,77,106,0.08)'; border = '1px solid var(--red)'; color = 'var(--red)' }
+                    else { color = 'var(--muted)' }
+                  }
+                  return (
+                    <button key={i} onClick={() => answer(opt)} disabled={hasAnswered} style={{
+                      textAlign: 'left', padding: '11px 14px', background: bg, border, borderRadius: 8,
+                      cursor: hasAnswered ? 'default' : 'pointer', fontSize: 13, color,
+                      fontFamily: 'monospace', lineHeight: 1.5, transition: 'all 0.1s',
+                    }}>
+                      <span style={{ color: 'var(--muted)', marginRight: 8 }}>{String.fromCharCode(65 + i)}.</span>
+                      {opt}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {hasAnswered && (
+              <button onClick={next} style={{
+                marginTop: 16, width: '100%', padding: '11px', background: 'var(--text)', color: 'var(--bg)',
+                border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'monospace',
+              }}>
+                {current < questions.length - 1 ? 'Next question →' : generating ? 'Loading more...' : 'Generate more →'}
+              </button>
+            )}
           </div>
 
-          {q.type === 'flashcard' ? (
-            <div>
-              {answered[current] === undefined ? (
-                <button onClick={() => answer(q.correct_answer)} style={{
-                  padding: '10px 20px', background: 'var(--surface)', border: '1px solid var(--border)',
-                  borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text)', fontFamily: 'monospace',
-                }}>Reveal answer</button>
-              ) : (
-                <div style={{ padding: 12, background: 'rgba(0,217,126,0.1)', borderRadius: 6, border: '1px solid var(--green)', fontSize: 13, color: 'var(--text)', lineHeight: 1.6 }}>
-                  {q.correct_answer}
+          {/* Right: Explanation panel — only shows after answering */}
+          {hasAnswered && feedback && (
+            <div style={{ background: 'var(--surface)', border: `1px solid ${feedback.is_correct ? 'var(--green)' : 'var(--red)'}`, borderRadius: 10, padding: 22 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: feedback.is_correct ? 'var(--green)' : 'var(--red)', marginBottom: 14 }}>
+                {feedback.is_correct ? '✓ Correct' : '✗ Incorrect'}
+              </div>
+
+              {!feedback.is_correct && (
+                <div style={{ marginBottom: 14, padding: 12, background: 'rgba(0,217,126,0.08)', borderRadius: 6, border: '1px solid var(--green)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Correct answer</div>
+                  <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6 }}>{feedback.correct_answer}</div>
+                </div>
+              )}
+
+              <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Explanation</div>
+              <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.8 }}>
+                {feedback.explanation}
+              </div>
+
+              {feedback.times_shown > 1 && (
+                <div style={{ marginTop: 14, padding: 10, background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                    You've seen this question {feedback.times_shown} times — 
+                    correct {feedback.times_correct}/{feedback.times_shown} ({Math.round(feedback.times_correct/feedback.times_shown*100)}%)
+                  </div>
+                  {feedback.times_correct / feedback.times_shown < 0.6 && (
+                    <div style={{ fontSize: 11, color: 'var(--amber)', marginTop: 4 }}>
+                      ⚠ This is a weak area — it will appear again until you get it consistently right
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {allOptions.map((opt, i) => {
-                const userAnswered = answered[current] !== undefined
-                const isChosen = answered[current] === opt
-                const isCorrect = opt === q.correct_answer
-                let bg = 'var(--bg)', border = 'var(--border)', color = 'var(--text)'
-                if (userAnswered) {
-                  if (isCorrect) { bg = 'rgba(0,217,126,0.1)'; border = 'var(--green)'; color = 'var(--green)' }
-                  else if (isChosen) { bg = 'rgba(255,77,106,0.1)'; border = 'var(--red)'; color = 'var(--red)' }
-                }
-                return (
-                  <button key={i} onClick={() => answer(opt)} disabled={userAnswered} style={{
-                    textAlign: 'left', padding: '9px 14px', background: bg,
-                    border: `1px solid ${border}`, borderRadius: 6, cursor: userAnswered ? 'default' : 'pointer',
-                    fontSize: 12, color, fontFamily: 'monospace', lineHeight: 1.5,
-                  }}>{opt}</button>
-                )
-              })}
-            </div>
-          )}
-
-          {feedback && answered[current] !== undefined && (
-            <div style={{ marginTop: 14, padding: 12, background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)', fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
-              <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
-                {feedback.is_correct ? '✓ Correct' : '✗ Incorrect — here\'s why:'}
-              </div>
-              {feedback.explanation}
-            </div>
-          )}
-
-          {answered[current] !== undefined && (
-            <button onClick={next} style={{
-              marginTop: 14, padding: '9px 20px', background: 'var(--text)', color: 'var(--bg)',
-              border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'monospace',
-            }}>
-              {current < questions.length - 1 ? 'Next question →' : generating ? 'Loading more...' : 'Generate more →'}
-            </button>
           )}
         </div>
-      )}
-
-      {questions.length === 0 && !generating && (
-        <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 60, border: '1px dashed var(--border)', borderRadius: 10 }}>
-          Select a project and question type above, then click Start quiz.
+      ) : (
+        <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 80, border: '1px dashed var(--border)', borderRadius: 10 }}>
+          {generating ? 'Generating questions...' : 'Select a project and question type above, then click Start quiz.'}
         </div>
       )}
     </div>
