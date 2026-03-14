@@ -1,4 +1,4 @@
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API = 'https://hospitable-nature-production-4e60.up.railway.app'
 
 export interface Project {
   id: string
@@ -16,6 +16,7 @@ export interface Project {
   elapsed_seconds: number
   minutes_remaining: number
   has_build_summary: boolean
+  build_summary: string
   started_at: string | null
   completed_at: string | null
 }
