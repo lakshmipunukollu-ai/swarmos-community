@@ -41,6 +41,33 @@ function QuizContent() {
   const [score, setScore] = useState({ correct: 0, total: 0 })
   const [generating, setGenerating] = useState(false)
   const [feedback, setFeedback] = useState<any>(null)
+  const [quizMode, setQuizMode] = useState<'standard' | 'code'>('standard')
+  const [projectFiles, setProjectFiles] = useState<{ path: string; size: number }[]>([])
+  const [selectedFile, setSelectedFile] = useState('')
+  const [walkthroughQuestions, setWalkthroughQuestions] = useState<any[]>([])
+  const [walkthroughLoading, setWalkthroughLoading] = useState(false)
+  const [walkthroughIndex, setWalkthroughIndex] = useState(0)
+
+  const loadFiles = useCallback(async (pid: string) => {
+    const result = await api.listProjectFiles(pid)
+    setProjectFiles(result.files || [])
+  }, [])
+
+  useEffect(() => {
+    if (projectId) loadFiles(projectId)
+  }, [projectId, loadFiles])
+
+  const startWalkthrough = async () => {
+    if (!projectId || !selectedFile) return
+    setWalkthroughLoading(true)
+    try {
+      const result = await api.codeWalkthrough(projectId, selectedFile)
+      setWalkthroughQuestions(result.questions || [])
+      setWalkthroughIndex(0)
+    } finally {
+      setWalkthroughLoading(false)
+    }
+  }
 
   const q = questions[current]
 
@@ -103,6 +130,17 @@ function QuizContent() {
 
       {/* Controls bar */}
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
+          {(['standard', 'code'] as const).map(mode => (
+            <button key={mode} type="button" onClick={() => setQuizMode(mode)} style={{
+              padding: '7px 16px', fontSize: 11, letterSpacing: 1, textTransform: 'uppercase',
+              borderRadius: 6, border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'monospace',
+              background: quizMode === mode ? 'var(--text)' : 'transparent',
+              color: quizMode === mode ? 'var(--bg)' : 'var(--muted)',
+            }}>{mode === 'standard' ? 'Standard quiz' : 'Code walkthrough'}</button>
+          ))}
+        </div>
+        {quizMode === 'standard' && (
         <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ flex: '0 0 260px' }}>
             <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Project</div>
@@ -115,7 +153,7 @@ function QuizContent() {
             <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Type</div>
             <div style={{ display: 'flex', gap: 4 }}>
               {TYPES.map(t => (
-                <button key={t} onClick={() => setQtype(t)} style={{
+                <button key={t} type="button" onClick={() => setQtype(t)} style={{
                   padding: '5px 10px', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase',
                   border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', fontFamily: 'monospace',
                   background: qtype === t ? 'var(--text)' : 'transparent',
@@ -128,7 +166,7 @@ function QuizContent() {
             <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Level — {LEVEL_LABELS[level - 1]}</div>
             <div style={{ display: 'flex', gap: 4 }}>
               {LEVELS.map((l, i) => (
-                <button key={l} onClick={() => setLevel(l)} title={LEVEL_LABELS[i]} style={{
+                <button key={l} type="button" onClick={() => setLevel(l)} title={LEVEL_LABELS[i]} style={{
                   width: 32, height: 32, fontSize: 13, fontFamily: 'monospace', fontWeight: 700,
                   border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer',
                   background: level === l ? 'var(--text)' : 'transparent',
@@ -138,7 +176,7 @@ function QuizContent() {
             </div>
           </div>
           <div style={{ marginLeft: 'auto' }}>
-            <button onClick={startFresh} disabled={generating} style={{
+            <button type="button" onClick={startFresh} disabled={generating} style={{
               padding: '10px 22px', background: generating ? 'var(--border)' : 'var(--text)',
               color: 'var(--bg)', border: 'none', borderRadius: 6, cursor: generating ? 'not-allowed' : 'pointer',
               fontSize: 12, fontWeight: 700, fontFamily: 'monospace',
@@ -147,10 +185,95 @@ function QuizContent() {
             </button>
           </div>
         </div>
+        )}
+        {quizMode === 'code' && (
+          <div style={{ flex: '0 0 260px', maxWidth: 400 }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Project</div>
+            <select value={projectId} onChange={e => setProjectId(e.target.value)}
+              style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontFamily: 'monospace', fontSize: 12, padding: '7px 10px' }}>
+              {PROJECTS.map(p => <option key={p.id} value={p.id}>{p.name} — {p.company}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
+      {quizMode === 'code' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Select file</div>
+            <select
+              value={selectedFile}
+              onChange={e => setSelectedFile(e.target.value)}
+              style={{
+                width: '100%', padding: '10px 14px',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 8, color: 'var(--text)', fontSize: 12, fontFamily: 'monospace',
+              }}
+            >
+              <option value="">Choose a file...</option>
+              {projectFiles.map(f => (
+                <option key={f.path} value={f.path}>{f.path} ({Math.round(f.size / 1024)}kb)</option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={startWalkthrough}
+            disabled={!selectedFile || walkthroughLoading}
+            style={{
+              padding: '11px 0', background: 'var(--text)', color: 'var(--bg)',
+              border: 'none', borderRadius: 8, cursor: 'pointer',
+              fontSize: 13, fontWeight: 700, fontFamily: 'monospace',
+            }}
+          >
+            {walkthroughLoading ? 'Reading file...' : 'Generate walkthrough'}
+          </button>
+
+          {walkthroughQuestions.length > 0 && (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 20 }}>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 12 }}>
+                Question {walkthroughIndex + 1} of {walkthroughQuestions.length}
+                {walkthroughQuestions[walkthroughIndex]?.line_reference && (
+                  <span style={{ marginLeft: 8, color: 'var(--blue)' }}>
+                    [{walkthroughQuestions[walkthroughIndex].line_reference}]
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 16, lineHeight: 1.6 }}>
+                {walkthroughQuestions[walkthroughIndex]?.question}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.7, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+                <div style={{ fontSize: 10, color: 'var(--green)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Answer</div>
+                {walkthroughQuestions[walkthroughIndex]?.correct_answer}
+              </div>
+              {walkthroughQuestions[walkthroughIndex]?.explanation && (
+                <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7, borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 12 }}>
+                  <div style={{ fontSize: 10, color: 'var(--amber)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Why it matters</div>
+                  {walkthroughQuestions[walkthroughIndex]?.explanation}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => setWalkthroughIndex(i => Math.max(0, i - 1))}
+                  disabled={walkthroughIndex === 0}
+                  style={{ padding: '8px 18px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--muted)', fontFamily: 'monospace', fontSize: 12 }}
+                >← Prev</button>
+                <button
+                  type="button"
+                  onClick={() => setWalkthroughIndex(i => Math.min(walkthroughQuestions.length - 1, i + 1))}
+                  disabled={walkthroughIndex === walkthroughQuestions.length - 1}
+                  style={{ padding: '8px 18px', background: 'var(--text)', color: 'var(--bg)', border: 'none', borderRadius: 6, cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, fontWeight: 700 }}
+                >Next →</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Score bar */}
-      {score.total > 0 && (
+      {quizMode === 'standard' && score.total > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 18px', marginBottom: 16 }}>
           <div style={{ fontSize: 32, fontWeight: 700, color: accuracy >= 70 ? 'var(--green)' : accuracy >= 50 ? 'var(--amber)' : 'var(--red)' }}>
             {score.correct}/{score.total}
@@ -171,7 +294,7 @@ function QuizContent() {
       )}
 
       {/* Two column layout when question is active */}
-      {q ? (
+      {quizMode === 'standard' && q ? (
         <div style={{ display: 'grid', gridTemplateColumns: hasAnswered ? '1fr 1fr' : '1fr', gap: 16, transition: 'all 0.3s' }}>
           {/* Left: Question */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 22 }}>
@@ -263,11 +386,11 @@ function QuizContent() {
             </div>
           )}
         </div>
-      ) : (
+      ) : quizMode === 'standard' ? (
         <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 80, border: '1px dashed var(--border)', borderRadius: 10 }}>
           {generating ? 'Generating questions...' : 'Select a project and question type above, then click Start quiz.'}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

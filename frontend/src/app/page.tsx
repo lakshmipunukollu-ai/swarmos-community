@@ -20,7 +20,7 @@ function TimeEstimate({ project }: { project: Project }) {
   return <span style={{ color: 'var(--amber)', fontSize: 11 }}>~{mins}m left ({pct}%)</span>
 }
 
-function ProjectCard({ project }: { project: Project }) {
+function ProjectCard({ project, onDelete, deletingId }: { project: Project; onDelete: (id: string) => void; deletingId: string | null }) {
   const pct = project.status === 'done' ? 100
     : project.status === 'building' ? Math.min(95, Math.round((project.elapsed_seconds / (project.estimated_minutes * 60)) * 100))
     : project.status === 'testing' ? 90 : 0
@@ -33,10 +33,26 @@ function ProjectCard({ project }: { project: Project }) {
   return (
     <Link href={`/projects/${project.id}`} style={{ textDecoration: 'none' }}>
       <div style={{
+        position: 'relative',
         background: 'var(--surface)', border: `1px solid ${borderColor}`,
         borderRadius: 10, padding: '14px 16px', cursor: 'pointer',
         transition: 'border-color 0.2s', height: '100%',
       }}>
+        <button
+          type="button"
+          onClick={e => { e.preventDefault(); e.stopPropagation(); onDelete(project.id) }}
+          disabled={deletingId === project.id}
+          style={{
+            position: 'absolute', top: 8, right: 8,
+            background: 'transparent', border: 'none',
+            color: 'var(--muted)', cursor: 'pointer',
+            fontSize: 14, padding: '2px 6px', borderRadius: 4,
+            opacity: 0.4,
+          }}
+          title="Delete project"
+        >
+          ✕
+        </button>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{project.name}</div>
@@ -103,8 +119,9 @@ export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([])
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const loadProjects = useCallback(async () => {
     try {
       const data = await api.getProjects()
       setProjects(data)
@@ -113,17 +130,27 @@ export default function Dashboard() {
     }
   }, [])
 
+  const handleDelete = async (id: string) => {
+    if (!confirm(`Delete ${id}? This cannot be undone.`)) return
+    setDeletingId(id)
+    try {
+      await api.deleteProject(id)
+      await loadProjects()
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   useEffect(() => {
-    load()
-    const interval = setInterval(load, 8000)
+    loadProjects()
+    const interval = setInterval(loadProjects, 8000)
     return () => clearInterval(interval)
-  }, [load])
+  }, [loadProjects])
 
   const filtered = filter === 'all' ? projects : projects.filter(p => p.status === filter)
   const done = projects.filter(p => p.status === 'done').length
   const building = projects.filter(p => p.status === 'building' || p.status === 'testing').length
   const errors = projects.filter(p => p.status === 'error').length
-  const totalCost = projects.reduce((sum, p) => sum + (p.elapsed_seconds / 3600) * 6, 0)
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--muted)' }}>
@@ -140,7 +167,6 @@ export default function Dashboard() {
             { label: 'building', value: building, color: 'var(--amber)' },
             { label: 'errors', value: errors, color: errors > 0 ? 'var(--red)' : 'var(--muted)' },
             { label: 'total', value: projects.length, color: 'var(--text)' },
-            { label: 'est. cost', value: `$${totalCost.toFixed(2)}`, color: 'var(--muted)' },
           ].map(s => (
             <div key={s.label} style={{ background: 'var(--surface)', borderRadius: 8, padding: '8px 16px', textAlign: 'center', border: '1px solid var(--border)', minWidth: 70 }}>
               <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
@@ -162,7 +188,7 @@ export default function Dashboard() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
-        {filtered.map(p => <ProjectCard key={p.id} project={p} />)}
+        {filtered.map(p => <ProjectCard key={p.id} project={p} onDelete={handleDelete} deletingId={deletingId} />)}
       </div>
 
       {filtered.length === 0 && (

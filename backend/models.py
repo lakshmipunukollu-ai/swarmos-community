@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Text, Enum as SAEnum, create_engine
+from sqlalchemy import Column, String, Integer, DateTime, Text, Enum as SAEnum, create_engine, text, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timezone
@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://ghostfolio@localhost:5432/swarmos")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://swarmos:swarmos123@localhost:5432/swarmos")
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -36,6 +36,8 @@ class Project(Base):
     github_url = Column(String, default="")
     last_log = Column(Text, default="")
     build_summary = Column(Text, default="")
+    hiring_notes = Column(Text, default="")
+    brief = Column(Text, default="")
     estimated_minutes = Column(Integer, default=120)
     elapsed_seconds = Column(Integer, default=0)
     started_at = Column(DateTime, nullable=True)
@@ -61,6 +63,7 @@ class QuizQuestion(Base):
     level = Column(Integer, default=1)
     question = Column(Text, nullable=False)
     correct_answer = Column(Text, nullable=False)
+    wrong_answers = Column(Text, default="[]")
     explanation = Column(Text, default="")
     times_shown = Column(Integer, default=0)
     times_correct = Column(Integer, default=0)
@@ -88,3 +91,21 @@ def get_db():
 
 def create_tables():
     Base.metadata.create_all(bind=engine)
+    insp = inspect(engine)
+
+    # Add brief to projects if missing
+    if "brief" not in [c["name"] for c in insp.get_columns("projects")]:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE projects ADD COLUMN brief TEXT DEFAULT ''"))
+            conn.commit()
+
+    # Add wrong_answers to quiz_questions if missing
+    if "wrong_answers" not in [c["name"] for c in insp.get_columns("quiz_questions")]:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE quiz_questions ADD COLUMN wrong_answers TEXT DEFAULT '[]'"))
+            conn.commit()
+
+    if "hiring_notes" not in [c["name"] for c in insp.get_columns("projects")]:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE projects ADD COLUMN hiring_notes TEXT DEFAULT ''"))
+            conn.commit()

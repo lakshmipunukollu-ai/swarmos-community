@@ -1,4 +1,4 @@
-const API = 'https://hospitable-nature-production-4e60.up.railway.app'
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 
 export interface Project {
   id: string
@@ -87,6 +87,29 @@ export const api = {
   },
   async getQuizStats(project_id: string) {
     const r = await fetch(`${API}/api/quiz/stats/${project_id}`, { cache: 'no-store' })
+    return r.json()
+  },
+  async deleteProject(id: string) {
+    const r = await fetch(`${API}/api/projects/${id}`, { method: 'DELETE' })
+    return r.json()
+  },
+  async refreshProject(id: string) {
+    const r = await fetch(`${API}/api/projects/${id}/refresh`, { method: 'POST' })
+    return r.json()
+  },
+  async getHiringLens(id: string) {
+    const r = await fetch(`${API}/api/projects/${id}/hiring-lens`, { method: 'POST' })
+    return r.json()
+  },
+  async listProjectFiles(id: string): Promise<{ files: { path: string; size: number }[] }> {
+    const r = await fetch(`${API}/api/quiz/files/${id}`, { cache: 'no-store' })
+    return r.json()
+  },
+  async codeWalkthrough(project_id: string, file_path: string) {
+    const r = await fetch(
+      `${API}/api/quiz/walkthrough?project_id=${encodeURIComponent(project_id)}&file_path=${encodeURIComponent(file_path)}`,
+      { method: 'POST' }
+    )
     return r.json()
   },
 }

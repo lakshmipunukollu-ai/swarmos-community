@@ -17,12 +17,11 @@ def count_files(project_path: str) -> int:
     return total
 
 
-def get_last_log(project_path: str) -> str:
+def get_all_log_lines(project_path: str) -> list[str]:
     log_path = Path(project_path) / ".agent_log.txt"
     if log_path.exists():
-        lines = log_path.read_text().strip().splitlines()
-        return lines[-1] if lines else ""
-    return ""
+        return log_path.read_text().strip().splitlines()
+    return []
 
 
 def get_agent_status(project_path: str) -> dict:
@@ -53,7 +52,8 @@ def sync_project_status():
 
             agent_status = get_agent_status(project_path)
             files_count = count_files(project_path)
-            last_log = get_last_log(project_path)
+            all_lines = get_all_log_lines(project_path)
+            last_log = all_lines[-1] if all_lines else ""
             build_summary = get_build_summary(project_path)
 
             status_str = agent_status.get("status", "")
@@ -70,13 +70,26 @@ def sync_project_status():
 
             project.files_count = files_count
             project.last_log = last_log or agent_status.get("last_action", "")
+            # Write new log lines to BuildLog (avoid duplicates via count watermark)
+            existing_count = db.query(BuildLog).filter(
+                BuildLog.project_id == project.id
+            ).count()
+            new_lines = all_lines[existing_count:]
+            for line in new_lines:
+                if line.strip():
+                    db.add(BuildLog(
+                        project_id=project.id,
+                        message=line.strip(),
+                        level="info",
+                        phase=project.phase or "",
+                    ))
             project.phase = agent_status.get("phase", project.phase)
 
             if build_summary:
                 project.build_summary = build_summary
 
             if project.started_at:
-                elapsed = (datetime.now(timezone.utc) - project.started_at.replace(tzinfo=timezone.utc)).seconds
+                elapsed = int((datetime.now(timezone.utc) - project.started_at.replace(tzinfo=timezone.utc)).total_seconds())
                 project.elapsed_seconds = elapsed
 
         db.commit()

@@ -24,6 +24,7 @@ services:
       DATABASE_URL: postgresql://swarmos:swarmos123@postgres:5432/swarmos
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       REDIS_URL: redis://redis:6379
+      SWARM_PROJECTS_DIR: /gauntlet-projects
     depends_on:
       - postgres
       - redis

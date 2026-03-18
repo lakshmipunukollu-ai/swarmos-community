@@ -5,7 +5,7 @@ from models import SessionLocal, QuizQuestion, QuizAttempt, Project
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-QUESTION_TYPES = ["architecture", "code", "system_design", "flashcard"]
+QUESTION_TYPES = ["architecture", "code", "system_design", "flashcard", "code_walkthrough"]
 
 LEVEL_DESCRIPTIONS = {
     1: "What was built — basic understanding of what this project does",
@@ -88,6 +88,7 @@ Respond ONLY with the JSON array. No markdown. No preamble."""
                 level=q["level"],
                 question=q["question"],
                 correct_answer=q["correct_answer"],
+                wrong_answers=json.dumps(q.get("wrong_answers", [])),
                 explanation=q["explanation"],
             )
             db.add(question)
@@ -96,7 +97,7 @@ Respond ONLY with the JSON array. No markdown. No preamble."""
                 "id": question.id,
                 "question": question.question,
                 "correct_answer": question.correct_answer,
-                "wrong_answers": q.get("wrong_answers", []),
+                "wrong_answers": json.loads(question.wrong_answers or "[]"),
                 "explanation": question.explanation,
                 "level": question.level,
                 "type": question.question_type,
@@ -127,6 +128,7 @@ def get_next_question(project_id: str, question_type: str) -> dict:
                 "id": weak.id,
                 "question": weak.question,
                 "correct_answer": weak.correct_answer,
+                "wrong_answers": json.loads(weak.wrong_answers or "[]"),
                 "explanation": weak.explanation,
                 "level": weak.level,
                 "type": weak.question_type,
@@ -145,6 +147,7 @@ def get_next_question(project_id: str, question_type: str) -> dict:
                 "id": unseen.id,
                 "question": unseen.question,
                 "correct_answer": unseen.correct_answer,
+                "wrong_answers": json.loads(unseen.wrong_answers or "[]"),
                 "explanation": unseen.explanation,
                 "level": unseen.level,
                 "type": unseen.question_type,
@@ -214,3 +217,63 @@ Keep it under 150 words. Be encouraging but direct."""}]
         return response.content[0].text.strip()
     except Exception:
         return original_explanation
+
+
+def generate_code_walkthrough(project_id: str, file_path: str) -> list:
+    """
+    Reads a source file and generates line-by-line teaching questions.
+    file_path is relative to SWARM_PROJECTS_DIR/{project_id}/
+    """
+    import os
+    from pathlib import Path
+
+    projects_dir = os.getenv("SWARM_PROJECTS_DIR", os.path.expanduser("~/gauntlet-swarm/projects"))
+    full_path = Path(projects_dir) / project_id / file_path
+
+    if not full_path.exists():
+        return [{"error": f"File not found: {file_path}"}]
+
+    source_code = full_path.read_text(errors="replace")
+    if len(source_code) > 8000:
+        source_code = source_code[:8000] + "\n\n[... file truncated for context ...]"
+
+    db = SessionLocal()
+    try:
+        project = db.query(Project).filter(Project.id == project_id).first()
+        project_name = project.name if project else project_id
+        stack = project.stack if project else ""
+    finally:
+        db.close()
+
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=3000,
+            messages=[{"role": "user", "content": f"""You are teaching an engineer to deeply understand code they built.
+
+PROJECT: {project_name}
+STACK: {stack}
+FILE: {file_path}
+
+SOURCE CODE:
+{source_code}
+
+Generate 5-8 teaching questions about this specific file.
+Cover: what each important section does, why it was written this way,
+what would break if removed, any patterns or gotchas.
+
+Respond with JSON array only (no markdown):
+[{{
+  "question": "What does lines X-Y do and why is it important?",
+  "correct_answer": "Detailed explanation of what the code does and why",
+  "wrong_answers": ["Plausible but incorrect explanation 1", "Plausible but incorrect explanation 2", "Plausible but incorrect explanation 3"],
+  "explanation": "Deeper context — the pattern being used, why this approach vs alternatives",
+  "level": 3,
+  "type": "code_walkthrough",
+  "line_reference": "lines X-Y or function name"
+}}]"""}]
+        )
+        text = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(text)
+    except Exception as e:
+        return [{"error": str(e)}]

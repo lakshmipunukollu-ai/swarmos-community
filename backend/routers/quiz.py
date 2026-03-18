@@ -1,7 +1,10 @@
+import os
+from pathlib import Path
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from models import get_db, QuizQuestion, QuizAttempt
-from services.quiz_engine import generate_questions, get_next_question, record_attempt
+from services.quiz_engine import generate_questions, get_next_question, record_attempt, generate_code_walkthrough
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/quiz", tags=["quiz"])
@@ -43,3 +46,39 @@ def get_stats(project_id: str, db: Session = Depends(get_db)):
         "correct": correct,
         "accuracy": round(correct / max(len(attempts), 1) * 100),
     }
+
+
+@router.get("/files/{project_id}")
+def list_project_files(project_id: str):
+    """Returns list of source files available for code walkthrough."""
+    projects_dir = os.getenv("SWARM_PROJECTS_DIR", os.path.expanduser("~/gauntlet-swarm/projects"))
+    project_path = Path(projects_dir) / project_id
+
+    if not project_path.exists():
+        return {"files": []}
+
+    SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", ".next",
+                 "dist", "build", ".gradle", "target"}
+    IMPORTANT_EXTS = {".py", ".ts", ".tsx", ".js", ".jsx", ".java", ".go",
+                      ".rs", ".rb", ".cs", ".md"}
+
+    files = []
+    for root, dirs, fnames in os.walk(project_path):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        for fname in fnames:
+            fpath = Path(root) / fname
+            if fpath.suffix.lower() in IMPORTANT_EXTS:
+                rel = str(fpath.relative_to(project_path))
+                size = fpath.stat().st_size
+                if size > 100:
+                    files.append({"path": rel, "size": size})
+
+    files.sort(key=lambda f: f["size"], reverse=True)
+    return {"files": files[:30]}
+
+
+@router.post("/walkthrough")
+def code_walkthrough(project_id: str, file_path: str):
+    """Generates line-by-line teaching questions for a specific source file."""
+    questions = generate_code_walkthrough(project_id, file_path)
+    return {"questions": questions}
