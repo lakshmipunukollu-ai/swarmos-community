@@ -231,8 +231,12 @@ function QuizContent() {
         [...chatMessages, { role: 'user', content: question }]
       )
       setChatMessages(prev => [...prev, { role: 'assistant', content: result.answer }])
-      if (result.quiz_worthy) {
-        setQuizWorthyTopics(prev => [...new Set([...prev, result.quiz_worthy])])
+          if (result.quiz_worthy) {
+        setQuizWorthyTopics(prev => {
+          const next = new Set(prev)
+          next.add(result.quiz_worthy)
+          return Array.from(next)
+        })
       }
     } finally {
       setChatLoading(false)
