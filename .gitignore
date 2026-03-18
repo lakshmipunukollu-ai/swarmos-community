@@ -7,3 +7,4 @@ __pycache__/
 .venv/
 .DS_Store
 postgres_data/
+swarmos_local_backup.sql
